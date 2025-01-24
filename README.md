@@ -1,5 +1,6 @@
 # ConfyUI for CosyVoice
-Support both CosyVoice1.0 and CosyVoice2.0
+Support both CosyVoice1.0 and CosyVoice2.0. 
+
 Referenced [CosyVoice-ComfyUI](https://github.com/AIFSH/CosyVoice-ComfyUI), the following modifications have been made:
 * Add support for CosyVoice2.0
 * Add whether to use stream processing options
