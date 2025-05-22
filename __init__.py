@@ -159,7 +159,7 @@ class CosyVoiceNode:
                 snapshot_download(model_id="iic/CosyVoice-300M-SFT",local_dir=model_dir)
 
 
-        if self.model_dir != model_dir:
+        if self.model_dir != model_dir or self.cosyvoice is None:
             self.model_dir = model_dir
             self.cosyvoice = CosyVoice(model_dir)
         
