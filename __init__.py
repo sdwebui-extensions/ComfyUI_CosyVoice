@@ -3,28 +3,19 @@ import os,sys
 cosyvoice_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(cosyvoice_path) 
 pretrained_models = os.path.join(cosyvoice_path,"pretrained_models")
+if os.path.exists('/stable-diffusion-cache/models/CosyVoice'):
+    pretrained_models = '/stable-diffusion-cache/models/CosyVoice'
 Matcha_TTS_Path = os.path.join(cosyvoice_path, 'third_party/Matcha-TTS')
 sys.path.insert(0, Matcha_TTS_Path)
 print(sys.path)
 
 import torch
 import random
-import librosa
 import zipfile
-import torchaudio
 import numpy as np
 import folder_paths
 input_dir = folder_paths.get_input_directory()
 output_dir = os.path.join(folder_paths.get_output_directory(),"cosyvoice_dubb")
-
-from modelscope import snapshot_download
-
-import ffmpeg
-import audiosegment
-from srt import parse as SrtPare
-
-
-from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2
 
 sft_spk_list = ['中文女', '中文男', '日语男', '粤语女', '英文女', '英文男', '韩语女']
 inference_mode_list = ['预训练音色', '3s极速复刻', '跨语种复刻', '自然语言控制']
@@ -39,6 +30,7 @@ def set_all_random_seed(seed):
 max_val = 0.8
 prompt_sr = 16000
 def postprocess(speech, model_sample_rate, top_db=60, hop_length=220, win_length=440):
+    import librosa
     speech, _ = librosa.effects.trim(
         speech, top_db=top_db,
         frame_length=win_length,
@@ -50,6 +42,7 @@ def postprocess(speech, model_sample_rate, top_db=60, hop_length=220, win_length
     return speech
 
 def speed_change(input_audio, speed, sr):
+    import ffmpeg
     # 检查输入数据类型和声道数
     if input_audio.dtype != np.int16:
         raise ValueError("输入音频数据类型必须为 np.int16")
@@ -133,10 +126,13 @@ class CosyVoiceNode:
 
     def generate(self,tts_text,speed,inference_mode,sft_dropdown,seed,stream_mode, notice_language,
                  prompt_text=None,prompt_wav=None,instruct_text=None):
+        import torchaudio
+        from cosyvoice.cli.cosyvoice import CosyVoice
         t0 = ttime()
         if inference_mode == '自然语言控制':
             model_dir = os.path.join(pretrained_models,"CosyVoice-300M-Instruct")
             if not os.path.exists(model_dir):
+                from modelscope import snapshot_download
                 snapshot_download(model_id="iic/CosyVoice-300M-Instruct",local_dir=model_dir)
             if notice_language == "CN":
                 assert instruct_text is not None, "自然语言控制模式下, instruct_text 不能为空"
@@ -145,6 +141,7 @@ class CosyVoiceNode:
         if inference_mode in ["跨语种复刻",'3s极速复刻']:
             model_dir = os.path.join(pretrained_models,"CosyVoice-300M")
             if not os.path.exists(model_dir):
+                from modelscope import snapshot_download
                 snapshot_download(model_id="iic/CosyVoice-300M",local_dir=model_dir)
             if notice_language == "CN":
                 assert prompt_wav is not None, "跨语种复刻或3s极速复刻模式下, prompt_wav不能为空"
@@ -158,6 +155,7 @@ class CosyVoiceNode:
         if inference_mode == "预训练音色":
             model_dir = os.path.join(pretrained_models,"CosyVoice-300M-SFT")
             if not os.path.exists(model_dir):
+                from modelscope import snapshot_download
                 snapshot_download(model_id="iic/CosyVoice-300M-SFT",local_dir=model_dir)
 
 
@@ -210,9 +208,10 @@ inference_mode_list2 = ['3s极速复刻', '跨语种复刻', '自然语言控制
 class CosyVoice2Node:
     def __init__(self):
         self.model_dir = os.path.join(pretrained_models, 'CosyVoice2-0.5B')
-        if not os.path.exists(self.model_dir):            
-                snapshot_download(model_id="iic/CosyVoice2-0.5B",local_dir=self.model_dir)
-        self.cosyvoice = CosyVoice2(self.model_dir, load_jit=False, load_trt=False, fp16=False)
+        if not os.path.exists(self.model_dir):
+            from modelscope import snapshot_download
+            snapshot_download(model_id="iic/CosyVoice2-0.5B",local_dir=self.model_dir)
+        self.cosyvoice = None
 
     @classmethod
     def INPUT_TYPES(s):
@@ -246,7 +245,11 @@ class CosyVoice2Node:
     CATEGORY = "CosyVoice"
 
     def generate(self, tts_text, speed, inference_mode, seed, stream_mode,notice_language,
-                 prompt_text=None, prompt_wav=None, instruct_text=None):        
+                 prompt_text=None, prompt_wav=None, instruct_text=None):    
+        import torchaudio    
+        from cosyvoice.cli.cosyvoice import CosyVoice2
+        if self.cosyvoice == None:
+            self.cosyvoice = CosyVoice2(self.model_dir, load_jit=False, load_trt=False, fp16=False)
        
         if notice_language == "CN":
             assert prompt_wav is not None, "自然语言控制、跨语种复刻和3s极速复刻模式下，prompt_wav不能为空"
@@ -320,7 +323,12 @@ class CosyVoiceDubbingNode:
 
     def generate(self,tts_srt,prompt_wav,language,if_single,seed,notice_language,prompt_srt=None):
         model_dir = os.path.join(pretrained_models,"CosyVoice-300M")
+        import audiosegment
+        import torchaudio
+        from cosyvoice.cli.cosyvoice import CosyVoice
+        from srt import parse as SrtPare
         if not os.path.exists(model_dir):
+            from modelscope import snapshot_download
             snapshot_download(model_id="iic/CosyVoice-300M",local_dir=model_dir)
         set_all_random_seed(seed)
         if self.cosyvoice is None:
